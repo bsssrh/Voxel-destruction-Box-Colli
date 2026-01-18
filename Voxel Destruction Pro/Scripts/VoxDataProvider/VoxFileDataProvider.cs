@@ -94,9 +94,12 @@ namespace VoxelDestructionPro.VoxDataProviders
                 if (vox == null)
                     return;
 
-                vox = ApplyMirroring(vox, disposeSource: true);
-                if (vox == null)
-                    return;
+                if (IsMirroringEnabled())
+                {
+                    vox = ApplyMirroring(vox, disposeSource: true);
+                    if (vox == null)
+                        return;
+                }
 
                 targetObj.AssignVoxelData(vox, editorMode);
             }
@@ -115,11 +118,18 @@ namespace VoxelDestructionPro.VoxDataProviders
                 if (cached == null)
                     return;
 
-                VoxelData dataToAssign = ApplyMirroring(cached, disposeSource: false);
-                if (dataToAssign == null)
-                    return;
+                if (IsMirroringEnabled())
+                {
+                    VoxelData dataToAssign = ApplyMirroring(cached, disposeSource: false);
+                    if (dataToAssign == null)
+                        return;
 
-                targetObj.AssignVoxelData(dataToAssign, editorMode);
+                    targetObj.AssignVoxelData(dataToAssign, editorMode);
+                }
+                else
+                {
+                    targetObj.AssignVoxelData(cached, editorMode);
+                }
             }
 #endif
         }
@@ -143,11 +153,19 @@ namespace VoxelDestructionPro.VoxDataProviders
 
             if (useModelCaching && !editorMode && _assetCache.TryGetValue(cacheKey, out var cached) && cached != null)
             {
-                VoxelData dataToAssign = ApplyMirroring(cached, disposeSource: false);
-                if (dataToAssign == null)
-                    return false;
+                if (IsMirroringEnabled())
+                {
+                    VoxelData cachedDataToAssign = ApplyMirroring(cached, disposeSource: false);
+                    if (cachedDataToAssign == null)
+                        return false;
 
-                targetObj.AssignVoxelData(dataToAssign, editorMode);
+                    targetObj.AssignVoxelData(cachedDataToAssign, editorMode);
+                }
+                else
+                {
+                    targetObj.AssignVoxelData(cached, editorMode);
+                }
+
                 return true;
             }
 
@@ -203,11 +221,18 @@ namespace VoxelDestructionPro.VoxDataProviders
             }
 
             bool disposeSource = !shouldCache;
-            VoxelData dataToAssign = ApplyMirroring(data, disposeSource);
-            if (dataToAssign == null)
-                return false;
+            if (IsMirroringEnabled())
+            {
+                VoxelData dataToAssign = ApplyMirroring(data, disposeSource);
+                if (dataToAssign == null)
+                    return false;
 
-            targetObj.AssignVoxelData(dataToAssign, editorMode);
+                targetObj.AssignVoxelData(dataToAssign, editorMode);
+            }
+            else
+            {
+                targetObj.AssignVoxelData(data, editorMode);
+            }
 
             return true;
 #endif
@@ -254,9 +279,12 @@ namespace VoxelDestructionPro.VoxDataProviders
             if (data == null)
                 yield break;
 
-            data = ApplyMirroring(data, disposeSource: true);
-            if (data == null)
-                yield break;
+            if (IsMirroringEnabled())
+            {
+                data = ApplyMirroring(data, disposeSource: true);
+                if (data == null)
+                    yield break;
+            }
 
             targetObj.AssignVoxelData(data);
         }
