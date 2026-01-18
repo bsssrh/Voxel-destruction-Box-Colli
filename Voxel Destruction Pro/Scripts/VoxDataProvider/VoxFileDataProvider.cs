@@ -229,6 +229,40 @@ namespace VoxelDestructionPro.VoxDataProviders
         }
 
 #if UNITY_EDITOR
+        public void ScheduleEditorReload()
+        {
+            if (EditorApplication.isPlayingOrWillChangePlaymode)
+                return;
+
+            if (!isActiveAndEnabled)
+                return;
+
+            if (_autoLoadScheduled)
+                return;
+
+            _autoLoadScheduled = true;
+
+            EditorApplication.delayCall += () =>
+            {
+                _autoLoadScheduled = false;
+
+                if (this == null)
+                    return;
+
+                if (!isActiveAndEnabled)
+                    return;
+
+                try
+                {
+                    Load(true);
+                }
+                catch
+                {
+                    // Никакого спама — полностью тихо
+                }
+            };
+        }
+
         private void OnValidate()
         {
             if (EditorApplication.isPlayingOrWillChangePlaymode)
@@ -246,31 +280,7 @@ namespace VoxelDestructionPro.VoxDataProviders
 
             _lastAutoLoadHash = h;
 
-            if (!isActiveAndEnabled)
-                return;
-
-            if (_autoLoadScheduled)
-                return;
-
-            _autoLoadScheduled = true;
-
-            // ВАЖНО: delayCall, чтобы не грузить в середине сериализации инспектора
-            EditorApplication.delayCall += () =>
-            {
-                _autoLoadScheduled = false;
-
-                if (this == null) return;
-                if (!isActiveAndEnabled) return;
-
-                try
-                {
-                    Load(true);
-                }
-                catch
-                {
-                    // Никакого спама — полностью тихо
-                }
-            };
+            ScheduleEditorReload();
         }
 #endif
     }
