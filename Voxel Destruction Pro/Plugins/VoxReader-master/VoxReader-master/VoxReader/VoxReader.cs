@@ -23,17 +23,17 @@ namespace VoxReader
         /// <summary>
         /// Reads the file at the provided path.
         /// </summary>
-        public static IVoxFile Read(string filePath, bool useBSA)
+        public static IVoxFile Read(string filePath, bool useBSA, bool applyTransformRotation = false)
         {
             byte[] data = useBSA ? BetterStreamingAssets.ReadAllBytes(filePath) : File.ReadAllBytes(filePath);
 
-            return Read(data);
+            return Read(data, applyTransformRotation);
         }
         
         /// <summary>
         /// Reads the data from the provided byte array.
         /// </summary>
-        public static IVoxFile Read(byte[] data)
+        public static IVoxFile Read(byte[] data, bool applyTransformRotation = false)
         {
             int versionNumber = BitConverter.ToInt32(data, 4);
 
@@ -41,7 +41,7 @@ namespace VoxReader
 
             var palette = new Palette(mainChunk.GetChild<IPaletteChunk>().Colors);
 
-            var models = Helper.ExtractModels(mainChunk, palette).ToArray();
+            var models = Helper.ExtractModels(mainChunk, palette, applyTransformRotation).ToArray();
 
             return new VoxFile(versionNumber, models, palette, mainChunk.Children);
         }
