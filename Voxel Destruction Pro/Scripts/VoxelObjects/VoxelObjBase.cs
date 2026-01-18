@@ -69,6 +69,8 @@ namespace VoxelDestructionPro.VoxelObjects
         public int destructionDelayFrames = 1;
         [Min(1)]
         public int maxDeferredDestructionsPerFrame = 4;
+        [Min(1)]
+        public int maxMeshRegenerationsPerFrame = 2;
 
         [HideInInspector]
         public int startVoxelCount;
@@ -85,6 +87,7 @@ namespace VoxelDestructionPro.VoxelObjects
         protected bool isCreated;
 
         private bool destructionQueued;
+        private bool meshRegenerationQueued;
         
         //Active
         protected bool meshRegenerationActive;
@@ -120,6 +123,9 @@ namespace VoxelDestructionPro.VoxelObjects
         private static readonly System.Collections.Generic.List<DestructionRequest> DestructionQueue = new System.Collections.Generic.List<DestructionRequest>();
         private static int lastDestructionProcessFrame = -1;
         private static int globalMaxDeferredDestructionsPerFrame = 4;
+        private static readonly System.Collections.Generic.List<VoxelObjBase> MeshRegenerationQueue = new System.Collections.Generic.List<VoxelObjBase>();
+        private static int lastMeshProcessFrame = -1;
+        private static int globalMaxMeshRegenerationsPerFrame = 2;
         
         #endregion
 
@@ -129,6 +135,7 @@ namespace VoxelDestructionPro.VoxelObjects
         {
             compoundColliderManager = GetComponent<CompoundBoxColliderManager>();
             globalMaxDeferredDestructionsPerFrame = Mathf.Max(globalMaxDeferredDestructionsPerFrame, maxDeferredDestructionsPerFrame);
+            globalMaxMeshRegenerationsPerFrame = Mathf.Max(globalMaxMeshRegenerationsPerFrame, maxMeshRegenerationsPerFrame);
         }
         
         protected virtual void Start()
@@ -225,7 +232,7 @@ namespace VoxelDestructionPro.VoxelObjects
                 currentVoxelCount = startVoxelCount;
             }
             isValidObject = true;
-            meshRegenerationRequested = true;
+            RequestMeshRegeneration();
             
             if (!isCreated)
                 Create(editorMode);
@@ -307,7 +314,7 @@ namespace VoxelDestructionPro.VoxelObjects
             //Destroy the mesh to remove it from memory, 10 seconds delay because the collision could still be
             //baking in background
             if (cMesh != m && !editorMode)
-                Destroy(cMesh, 10f); 
+                StartCoroutine(ReleaseMeshAfterDelay(cMesh, 10f));
             
             cMesh = m;
             if (onMeshGenerated != null)
@@ -397,7 +404,7 @@ namespace VoxelDestructionPro.VoxelObjects
             isValidObject = false;
             
             if (cMesh != null && Application.isPlaying)
-                Destroy(cMesh, 10f);
+                StartCoroutine(ReleaseMeshAfterDelay(cMesh, 10f));
             
             if (targetFilter != null)
                 targetFilter.mesh = null;
@@ -492,6 +499,8 @@ namespace VoxelDestructionPro.VoxelObjects
 
         private void OnDestroy()
         {
+            if (cMesh != null)
+                MeshPool.Release(cMesh);
             DisposeAll();
         }
 
@@ -517,6 +526,7 @@ namespace VoxelDestructionPro.VoxelObjects
         protected virtual void Update()
         {
             ProcessDestructionQueue();
+            ProcessMeshRegenerationQueue();
 
             if (objectDestructionRequested && CanDestroyObject())
                 QueueDestruction();
@@ -524,13 +534,6 @@ namespace VoxelDestructionPro.VoxelObjects
             if (!isValidObject)
                 return;
             
-            if (meshRegenerationRequested && !meshRegenerationActive)
-            {
-                meshRegenerationRequested = false;
-                if (isActiveAndEnabled)
-                    StartCoroutine(GenerateMesh());
-            }
-
             if (compoundColliderManager == null && colliderBakeRequested && !colliderBakeActive && targetCollider is MeshCollider mc)
             {
                 colliderBakeRequested = false;
@@ -721,6 +724,7 @@ namespace VoxelDestructionPro.VoxelObjects
         public void RequestMeshRegeneration()
         {
             meshRegenerationRequested = true;
+            QueueMeshRegeneration();
         }
 
         public void RequestCompoundColliderRebuild()
@@ -754,6 +758,63 @@ namespace VoxelDestructionPro.VoxelObjects
             IVoxelMeshReady[] listeners = GetComponents<IVoxelMeshReady>();
             for (int i = 0; i < listeners.Length; i++)
                 listeners[i].OnMeshGenerated(mesh);
+        }
+
+        private void QueueMeshRegeneration()
+        {
+            if (meshRegenerationQueued)
+                return;
+
+            meshRegenerationQueued = true;
+            MeshRegenerationQueue.Add(this);
+        }
+
+        private static void ProcessMeshRegenerationQueue()
+        {
+            if (Time.frameCount == lastMeshProcessFrame)
+                return;
+
+            lastMeshProcessFrame = Time.frameCount;
+
+            for (int i = MeshRegenerationQueue.Count - 1; i >= 0; i--)
+            {
+                if (MeshRegenerationQueue[i] == null)
+                    MeshRegenerationQueue.RemoveAt(i);
+            }
+
+            int budget = Mathf.Max(1, globalMaxMeshRegenerationsPerFrame);
+            int processed = 0;
+
+            for (int i = 0; i < MeshRegenerationQueue.Count && processed < budget;)
+            {
+                VoxelObjBase target = MeshRegenerationQueue[i];
+                if (target == null)
+                {
+                    MeshRegenerationQueue.RemoveAt(i);
+                    continue;
+                }
+
+                if (!target.meshRegenerationRequested || target.meshRegenerationActive || !target.isActiveAndEnabled)
+                {
+                    i++;
+                    continue;
+                }
+
+                target.meshRegenerationRequested = false;
+                target.meshRegenerationQueued = false;
+                target.StartCoroutine(target.GenerateMesh());
+                MeshRegenerationQueue.RemoveAt(i);
+                processed++;
+            }
+        }
+
+        private IEnumerator ReleaseMeshAfterDelay(Mesh mesh, float delaySeconds)
+        {
+            if (mesh == null)
+                yield break;
+
+            yield return new WaitForSeconds(delaySeconds);
+            MeshPool.Release(mesh);
         }
 
         protected GameObject InstantiateVox(GameObject prefab, Vector3 pos, Quaternion rot)
