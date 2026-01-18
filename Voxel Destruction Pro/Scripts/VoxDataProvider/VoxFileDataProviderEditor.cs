@@ -58,6 +58,9 @@ public class VoxFileDataProviderEditor : Editor
     SerializedProperty modelPathProp;
     SerializedProperty modelIndexProp;
     SerializedProperty useModelCachingProp;
+    SerializedProperty mirrorXProp;
+    SerializedProperty mirrorYProp;
+    SerializedProperty mirrorZProp;
 
     private void OnEnable()
     {
@@ -65,6 +68,9 @@ public class VoxFileDataProviderEditor : Editor
         modelPathProp = serializedObject.FindProperty("modelPath");
         modelIndexProp = serializedObject.FindProperty("modelIndex");
         useModelCachingProp = serializedObject.FindProperty("useModelCaching");
+        mirrorXProp = serializedObject.FindProperty("mirrorX");
+        mirrorYProp = serializedObject.FindProperty("mirrorY");
+        mirrorZProp = serializedObject.FindProperty("mirrorZ");
     }
 
     public override void OnInspectorGUI()
@@ -112,6 +118,15 @@ public class VoxFileDataProviderEditor : Editor
         EditorGUILayout.PropertyField(useModelCachingProp);
         settingsChanged |= EditorGUI.EndChangeCheck();
         EditorGUILayout.HelpBox("Priority: VoxFile first, then Model Path.\nEditor UX: click a .vox in picker list to assign instantly.", MessageType.Info);
+
+        EditorGUILayout.Space(6);
+        EditorGUILayout.LabelField("Mirroring", EditorStyles.boldLabel);
+        EditorGUI.BeginChangeCheck();
+        EditorGUILayout.PropertyField(mirrorXProp, new GUIContent("Mirror X"));
+        EditorGUILayout.PropertyField(mirrorYProp, new GUIContent("Mirror Y"));
+        EditorGUILayout.PropertyField(mirrorZProp, new GUIContent("Mirror Z"));
+        settingsChanged |= EditorGUI.EndChangeCheck();
+        EditorGUILayout.HelpBox("When any mirror axis is enabled the model will be mirrored along that axis.", MessageType.None);
 
         serializedObject.ApplyModifiedProperties();
 
