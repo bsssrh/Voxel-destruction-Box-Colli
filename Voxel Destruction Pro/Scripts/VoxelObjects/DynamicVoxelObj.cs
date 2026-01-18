@@ -572,7 +572,7 @@ namespace VoxelDestructionPro.VoxelObjects
 
             if (voxelIndex.Length > 0)
             {
-                meshRegenerationRequested = true;
+                RequestMeshRegeneration();
 
                 if (isoSettings.isolationMode != IsoSettings.IsolationMode.None)
                     isolatorRequested = true;

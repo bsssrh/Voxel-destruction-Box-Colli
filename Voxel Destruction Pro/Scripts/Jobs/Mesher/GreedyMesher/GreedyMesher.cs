@@ -10,6 +10,7 @@ using UnityEngine.Profiling;
 using UnityEngine.Rendering;
 using VoxelDestructionPro.Data;
 using VoxelDestructionPro.Interfaces;
+using VoxelDestructionPro.Tools;
 
 namespace VoxelDestructionPro.Jobs.Mesher
 {
@@ -87,13 +88,28 @@ namespace VoxelDestructionPro.Jobs.Mesher
                 return;
 
             greedyJob.inputSize = data.length;
+            EnsureVoxelBuffer(data.voxels.Length);
             data.voxels.CopyTo(inputVoxels);
 
             greedyJob.inputVoxels = inputVoxels;
             EnsurePaletteCopy(data.palette);
             greedyJob.inputPalette = inputPalette;
+            EnsureMaskBuffer(data.length);
 
             greedyJobHandle = greedyJob.Schedule();
+        }
+
+        private void EnsureVoxelBuffer(int length)
+        {
+            if (inputVoxels.IsCreated && inputVoxels.Length != length)
+            {
+                inputVoxels.Dispose();
+                inputVoxels = new NativeArray<Voxel>(length, Allocator.Persistent, NativeArrayOptions.UninitializedMemory);
+            }
+            else if (!inputVoxels.IsCreated)
+            {
+                inputVoxels = new NativeArray<Voxel>(length, Allocator.Persistent, NativeArrayOptions.UninitializedMemory);
+            }
         }
 
         private void EnsurePaletteCopy(NativeArray<Color> palette)
@@ -106,6 +122,17 @@ namespace VoxelDestructionPro.Jobs.Mesher
 
             if (palette.Length > 0)
                 palette.CopyTo(inputPalette);
+        }
+
+        private void EnsureMaskBuffer(int3 length)
+        {
+            int targetLength = GetMaskLength(length);
+            if (mask.IsCreated && mask.Length != targetLength)
+            {
+                mask.Dispose();
+                mask = new NativeArray<Voxel>(targetLength, Allocator.Persistent, NativeArrayOptions.UninitializedMemory);
+                greedyJob.mask = mask;
+            }
         }
         
         public void StartBuildMesh()
@@ -132,7 +159,7 @@ namespace VoxelDestructionPro.Jobs.Mesher
             
             meshJobHandle.Complete();
 
-            Mesh mesh = new Mesh();        
+            Mesh mesh = MeshPool.Acquire();
             Mesh.ApplyAndDisposeWritableMeshData(meshJob.dataArray, mesh, noUpdateFlags);
             mesh.bounds = new Bounds(meshJob.boundsValues[0], meshJob.boundsValues[1]);
 
@@ -153,7 +180,7 @@ namespace VoxelDestructionPro.Jobs.Mesher
             meshJob.dataArray = Mesh.AllocateWritableMeshData(1);
             meshJob.Run();
             
-            Mesh mesh = new Mesh();        
+            Mesh mesh = MeshPool.Acquire();
             Mesh.ApplyAndDisposeWritableMeshData(meshJob.dataArray, mesh, noUpdateFlags);
             mesh.bounds = new Bounds(meshJob.boundsValues[0], meshJob.boundsValues[1]);
             

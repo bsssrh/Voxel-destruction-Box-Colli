@@ -74,12 +74,16 @@ public class VoxFileDataProviderEditor : Editor
         EditorGUILayout.LabelField("Source (choose ONE)", EditorStyles.boldLabel);
         DrawVoxOnlyField();
 
+        bool settingsChanged = false;
+
         // Slider для modelIndex, если voxFile задан и у него есть модели
         var vox = voxFileProp.objectReferenceValue as DefaultAsset;
         int modelCount = VoxModelInfoCache.GetModelCount(vox);
 
         EditorGUILayout.Space(6);
+        EditorGUI.BeginChangeCheck();
         EditorGUILayout.PropertyField(modelPathProp);
+        settingsChanged |= EditorGUI.EndChangeCheck();
 
         if (vox != null && modelCount > 0)
         {
@@ -89,23 +93,40 @@ public class VoxFileDataProviderEditor : Editor
             EditorGUI.BeginChangeCheck();
             cur = EditorGUILayout.IntSlider(new GUIContent($"Model Index (0..{maxIndex})"), cur, 0, maxIndex);
             if (EditorGUI.EndChangeCheck())
+            {
                 modelIndexProp.intValue = cur;
+                settingsChanged = true;
+            }
 
             EditorGUILayout.LabelField($"Models in file: {modelCount}", EditorStyles.miniLabel);
         }
         else
         {
             // если voxFile нет, оставляем обычное поле
+            EditorGUI.BeginChangeCheck();
             EditorGUILayout.PropertyField(modelIndexProp);
+            settingsChanged |= EditorGUI.EndChangeCheck();
         }
 
+        EditorGUI.BeginChangeCheck();
         EditorGUILayout.PropertyField(useModelCachingProp);
+        settingsChanged |= EditorGUI.EndChangeCheck();
         EditorGUILayout.HelpBox("Priority: VoxFile first, then Model Path.\nEditor UX: click a .vox in picker list to assign instantly.", MessageType.Info);
 
         serializedObject.ApplyModifiedProperties();
 
         // Жёсткая защита: только .vox в поле
-        ValidateVoxFieldAndClampIndex();
+        settingsChanged |= ValidateVoxFieldAndClampIndex();
+
+        if (GUILayout.Button("Reload Now"))
+            settingsChanged = true;
+
+        if (settingsChanged)
+        {
+            var provider = (VoxFileDataProvider)target;
+            if (provider != null && provider.isActiveAndEnabled)
+                provider.ScheduleEditorReload();
+        }
     }
 
     private void DrawVoxOnlyField()
@@ -148,29 +169,29 @@ public class VoxFileDataProviderEditor : Editor
         }
     }
 
-    private void ValidateVoxFieldAndClampIndex()
+    private bool ValidateVoxFieldAndClampIndex()
     {
         var obj = voxFileProp.objectReferenceValue;
-        if (obj == null) return;
+        if (obj == null) return false;
 
         string path = AssetDatabase.GetAssetPath(obj);
         if (string.IsNullOrEmpty(path) || !path.EndsWith(".vox", StringComparison.OrdinalIgnoreCase))
         {
             voxFileProp.objectReferenceValue = null;
             serializedObject.ApplyModifiedProperties();
-            return;
+            return true;
         }
 
-        ClampModelIndexForCurrentVox();
+        return ClampModelIndexForCurrentVox();
     }
 
-    private void ClampModelIndexForCurrentVox()
+    private bool ClampModelIndexForCurrentVox()
     {
         var vox = voxFileProp.objectReferenceValue as DefaultAsset;
-        if (vox == null) return;
+        if (vox == null) return false;
 
         int modelCount = VoxModelInfoCache.GetModelCount(vox);
-        if (modelCount <= 0) return;
+        if (modelCount <= 0) return false;
 
         int max = modelCount - 1;
         int cur = modelIndexProp.intValue;
@@ -180,7 +201,9 @@ public class VoxFileDataProviderEditor : Editor
         {
             modelIndexProp.intValue = clamped;
             serializedObject.ApplyModifiedProperties();
+            return true;
         }
+        return false;
     }
 }
 

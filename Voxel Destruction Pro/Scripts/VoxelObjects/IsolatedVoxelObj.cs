@@ -134,7 +134,7 @@ namespace VoxelDestructionPro.VoxelObjects
                 onIsolationDataReturned.Invoke(data);
             
             if (!lockIsolatorRebuild)
-                meshRegenerationRequested = true;
+                RequestMeshRegeneration();
 
             RequestCompoundColliderRebuild();
             
