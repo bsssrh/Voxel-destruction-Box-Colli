@@ -154,9 +154,9 @@ namespace VoxReader
         private static RotationAxes DecodeRotationAxes(byte rotation)
         {
             int xAxisIndex = rotation & 0x03;
-            int yAxisIndex = (rotation >> 2) & 0x03;
+            int zAxisIndex = (rotation >> 2) & 0x03;
 
-            if (xAxisIndex == yAxisIndex || xAxisIndex > 2 || yAxisIndex > 2)
+            if (xAxisIndex == zAxisIndex || xAxisIndex > 2 || zAxisIndex > 2)
                 return RotationAxes.Identity;
 
             Vector3Int[] axisVectors =
