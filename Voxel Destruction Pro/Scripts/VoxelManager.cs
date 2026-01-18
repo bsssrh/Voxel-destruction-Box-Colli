@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using Better.StreamingAssets;
 using UnityEngine;
 using VoxelDestructionPro.Data;
+using VoxelDestructionPro.Data.Serializable;
 using VoxelDestructionPro.Settings;
 using VoxelDestructionPro.Tools;
 
@@ -56,6 +57,13 @@ namespace VoxelDestructionPro
         private Dictionary<GameObject, int> poolTargetCounts;
         private float poolingUpdateTimer;
         
+        //Vox obj caching
+        [Header("Voxel cache")]
+        [Min(0)]
+        public int maxVoxelCacheEntries = 128;
+        private Dictionary<Tuple<string, int>, LinkedListNode<VoxelCacheEntry>> voxelCache;
+        private LinkedList<VoxelCacheEntry> voxelCacheLru;
+
         private bool betterStreamingAssetsLoaded;
         
         private void Awake()
@@ -96,8 +104,21 @@ namespace VoxelDestructionPro
         /// <returns></returns>
         public VoxelData LoadAndCacheVoxFile(string modelpath, int modelIndex)
         {
+            voxelCache ??= new Dictionary<Tuple<string, int>, LinkedListNode<VoxelCacheEntry>>();
+            voxelCacheLru ??= new LinkedList<VoxelCacheEntry>();
+            
+            Tuple<string, int> key = new Tuple<string, int>(modelpath, modelIndex);
+            if (voxelCache.TryGetValue(key, out LinkedListNode<VoxelCacheEntry> cachedNode))
+            {
+                //Aleady cached, we dont need to load
+                voxelCacheLru.Remove(cachedNode);
+                voxelCacheLru.AddFirst(cachedNode);
+                return new VoxelData(cachedNode.Value.Data.GetCopy());
+            }
+
             VoxelParser parser = new VoxelParser(modelpath, modelIndex);
             VoxelData file = parser.ParseToVoxelData();
+            CacheVoxelData(key, file.ToCachedVoxelData().GetCopy());
 
             return file;
         }
@@ -209,5 +230,44 @@ namespace VoxelDestructionPro
 
         #endregion
 
+        private void CacheVoxelData(Tuple<string, int> key, CachedVoxelData data)
+        {
+            if (maxVoxelCacheEntries <= 0)
+                return;
+
+            if (voxelCache.TryGetValue(key, out LinkedListNode<VoxelCacheEntry> cachedNode))
+            {
+                cachedNode.Value.Data = data;
+                voxelCacheLru.Remove(cachedNode);
+                voxelCacheLru.AddFirst(cachedNode);
+                return;
+            }
+
+            var entry = new VoxelCacheEntry(key, data);
+            var node = voxelCacheLru.AddFirst(entry);
+            voxelCache[key] = node;
+
+            if (voxelCache.Count <= maxVoxelCacheEntries)
+                return;
+
+            LinkedListNode<VoxelCacheEntry> last = voxelCacheLru.Last;
+            if (last == null)
+                return;
+
+            voxelCacheLru.RemoveLast();
+            voxelCache.Remove(last.Value.Key);
+        }
+
+        private sealed class VoxelCacheEntry
+        {
+            public VoxelCacheEntry(Tuple<string, int> key, CachedVoxelData data)
+            {
+                Key = key;
+                Data = data;
+            }
+
+            public Tuple<string, int> Key { get; }
+            public CachedVoxelData Data { get; set; }
+        }
     }
 }
