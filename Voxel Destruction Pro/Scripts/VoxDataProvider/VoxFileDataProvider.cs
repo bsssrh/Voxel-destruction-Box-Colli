@@ -153,19 +153,11 @@ namespace VoxelDestructionPro.VoxDataProviders
 
             if (useModelCaching && !editorMode && _assetCache.TryGetValue(cacheKey, out var cached) && cached != null)
             {
-                if (IsMirroringEnabled())
-                {
-                    VoxelData cachedDataToAssign = ApplyMirroring(cached, disposeSource: false);
-                    if (cachedDataToAssign == null)
-                        return false;
+                VoxelData cachedDataToAssign = ApplyMirroring(cached, disposeSource: false);
+                if (cachedDataToAssign == null)
+                    return false;
 
-                    targetObj.AssignVoxelData(cachedDataToAssign, editorMode);
-                }
-                else
-                {
-                    targetObj.AssignVoxelData(cached, editorMode);
-                }
-
+                targetObj.AssignVoxelData(cachedDataToAssign, editorMode);
                 return true;
             }
 
