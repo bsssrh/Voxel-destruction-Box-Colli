@@ -155,8 +155,9 @@ namespace VoxReader
         {
             int xAxisIndex = rotation & 0x03;
             int zAxisIndex = (rotation >> 2) & 0x03;
+            int yAxisIndex = 3 - xAxisIndex - zAxisIndex;
 
-            if (xAxisIndex == zAxisIndex || xAxisIndex > 2 || zAxisIndex > 2)
+            if (xAxisIndex == zAxisIndex || xAxisIndex > 2 || zAxisIndex > 2 || yAxisIndex < 0 || yAxisIndex > 2)
                 return RotationAxes.Identity;
 
             Vector3Int[] axisVectors =

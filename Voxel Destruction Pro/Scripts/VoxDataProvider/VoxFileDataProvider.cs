@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.IO;
 using UnityEngine;
 using UnityEngine.Networking;
+using Unity.Mathematics;
 using VoxelDestructionPro.Data;
 using VoxelDestructionPro.Tools;
 using VoxReader.Interfaces;
@@ -29,6 +30,16 @@ namespace VoxelDestructionPro.VoxDataProviders
 
         [Tooltip("If enabled the vox file will only be read once and then cached and reused")]
         public bool useModelCaching = true;
+
+        [Header("Mirroring")]
+        [Tooltip("Mirror the model along the X axis.")]
+        public bool mirrorX;
+
+        [Tooltip("Mirror the model along the Y axis.")]
+        public bool mirrorY;
+
+        [Tooltip("Mirror the model along the Z axis.")]
+        public bool mirrorZ;
 
         // cache: assetInstanceId + modelIndex
         private static readonly Dictionary<long, VoxelData> _assetCache = new Dictionary<long, VoxelData>();
@@ -83,6 +94,10 @@ namespace VoxelDestructionPro.VoxDataProviders
                 if (vox == null)
                     return;
 
+                vox = ApplyMirroring(vox, disposeSource: true);
+                if (vox == null)
+                    return;
+
                 targetObj.AssignVoxelData(vox, editorMode);
             }
             else
@@ -100,7 +115,11 @@ namespace VoxelDestructionPro.VoxDataProviders
                 if (cached == null)
                     return;
 
-                targetObj.AssignVoxelData(cached, editorMode);
+                VoxelData dataToAssign = ApplyMirroring(cached, disposeSource: false);
+                if (dataToAssign == null)
+                    return;
+
+                targetObj.AssignVoxelData(dataToAssign, editorMode);
             }
 #endif
         }
@@ -124,7 +143,11 @@ namespace VoxelDestructionPro.VoxDataProviders
 
             if (useModelCaching && !editorMode && _assetCache.TryGetValue(cacheKey, out var cached) && cached != null)
             {
-                targetObj.AssignVoxelData(cached, editorMode);
+                VoxelData dataToAssign = ApplyMirroring(cached, disposeSource: false);
+                if (dataToAssign == null)
+                    return false;
+
+                targetObj.AssignVoxelData(dataToAssign, editorMode);
                 return true;
             }
 
@@ -172,13 +195,19 @@ namespace VoxelDestructionPro.VoxDataProviders
             if (data == null)
                 return false;
 
-            targetObj.AssignVoxelData(data, editorMode);
-
-            if (useModelCaching && !editorMode)
+            bool shouldCache = useModelCaching && !editorMode;
+            if (shouldCache)
             {
                 long finalKey = ((long)voxFile.GetInstanceID() << 32) ^ (uint)modelIndex;
                 _assetCache[finalKey] = data;
             }
+
+            bool disposeSource = !shouldCache;
+            VoxelData dataToAssign = ApplyMirroring(data, disposeSource);
+            if (dataToAssign == null)
+                return false;
+
+            targetObj.AssignVoxelData(dataToAssign, editorMode);
 
             return true;
 #endif
@@ -225,7 +254,50 @@ namespace VoxelDestructionPro.VoxDataProviders
             if (data == null)
                 yield break;
 
+            data = ApplyMirroring(data, disposeSource: true);
+            if (data == null)
+                yield break;
+
             targetObj.AssignVoxelData(data);
+        }
+
+        private bool IsMirroringEnabled()
+        {
+            return mirrorX || mirrorY || mirrorZ;
+        }
+
+        private static int To1D(int x, int y, int z, int3 length)
+        {
+            return x + length.x * (y + length.y * z);
+        }
+
+        private VoxelData ApplyMirroring(VoxelData source, bool disposeSource)
+        {
+            if (source == null || !IsMirroringEnabled())
+                return source;
+
+            int3 length = source.length;
+            Voxel[] mirroredVoxels = new Voxel[length.x * length.y * length.z];
+
+            for (int x = 0; x < length.x; x++)
+                for (int y = 0; y < length.y; y++)
+                    for (int z = 0; z < length.z; z++)
+                    {
+                        int sourceIndex = To1D(x, y, z, length);
+                        int targetX = mirrorX ? length.x - 1 - x : x;
+                        int targetY = mirrorY ? length.y - 1 - y : y;
+                        int targetZ = mirrorZ ? length.z - 1 - z : z;
+                        int targetIndex = To1D(targetX, targetY, targetZ, length);
+                        mirroredVoxels[targetIndex] = source.voxels[sourceIndex];
+                    }
+
+            Color[] paletteCopy = source.palette.ToArray();
+            VoxelData mirrored = new VoxelData(mirroredVoxels, paletteCopy, length);
+
+            if (disposeSource)
+                source.Dispose();
+
+            return mirrored;
         }
 
 #if UNITY_EDITOR
@@ -274,6 +346,9 @@ namespace VoxelDestructionPro.VoxDataProviders
             h = h * 31 + (modelPath != null ? modelPath.GetHashCode() : 0);
             h = h * 31 + modelIndex;
             h = h * 31 + (useModelCaching ? 1 : 0);
+            h = h * 31 + (mirrorX ? 1 : 0);
+            h = h * 31 + (mirrorY ? 1 : 0);
+            h = h * 31 + (mirrorZ ? 1 : 0);
 
             if (h == _lastAutoLoadHash)
                 return;
