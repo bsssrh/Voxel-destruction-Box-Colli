@@ -67,11 +67,30 @@ namespace VoxReader
                     string name = transformNodeChunk.Name;
                     Vector3 size = sizeChunks[id].Size;
                     Vector3 position = GetGlobalTranslation(transformNodeChunk);
+                    byte rotation = transformNodeChunk.Frames[0].Rotation;
+                    bool hasRotation = rotation != 0;
+                    RotationAxes rotationAxes = hasRotation ? DecodeRotationAxes(rotation) : RotationAxes.Identity;
+                    Vector3 rotatedSize = hasRotation ? GetRotatedSize(size, rotationAxes) : size;
+                    Vector3 pivot = hasRotation ? (size - Vector3.one) / 2f : Vector3.zero;
+                    Vector3 rotatedPivot = hasRotation ? (rotatedSize - Vector3.one) / 2f : Vector3.zero;
 
-                    var voxels = voxelChunks[id].Voxels.Select(voxel => new Voxel(voxel.Position, position + voxel.Position - size / 2, palette.Colors[voxel.ColorIndex - 1])).ToArray();
+                    var voxels = voxelChunks[id].Voxels.Select(voxel =>
+                    {
+                        Vector3 localPosition = voxel.Position;
+
+                        if (hasRotation)
+                        {
+                            Vector3 centered = localPosition - pivot;
+                            Vector3 rotated = ApplyRotation(centered, rotationAxes);
+                            localPosition = rotated + rotatedPivot;
+                        }
+
+                        Vector3 globalPosition = position + localPosition - rotatedSize / 2f;
+                        return new Voxel(localPosition, globalPosition, palette.Colors[voxel.ColorIndex - 1]);
+                    }).ToArray();
 
                     // Create new model
-                    var model = new Model(id, name, position, size, voxels, !processedModelIds.Add(id));
+                    var model = new Model(id, name, position, rotatedSize, voxels, !processedModelIds.Add(id));
                     yield return model;
                 }
             }
@@ -114,6 +133,71 @@ namespace VoxReader
                 parent = null;
                 return false;
             }
+        }
+
+        private static Vector3 ApplyRotation(Vector3 vector, RotationAxes axes)
+        {
+            return new Vector3(
+                axes.XAxis.x * vector.x + axes.YAxis.x * vector.y + axes.ZAxis.x * vector.z,
+                axes.XAxis.y * vector.x + axes.YAxis.y * vector.y + axes.ZAxis.y * vector.z,
+                axes.XAxis.z * vector.x + axes.YAxis.z * vector.y + axes.ZAxis.z * vector.z);
+        }
+
+        private static Vector3 GetRotatedSize(Vector3 size, RotationAxes axes)
+        {
+            return new Vector3(
+                Mathf.Abs(axes.XAxis.x) * size.x + Mathf.Abs(axes.YAxis.x) * size.y + Mathf.Abs(axes.ZAxis.x) * size.z,
+                Mathf.Abs(axes.XAxis.y) * size.x + Mathf.Abs(axes.YAxis.y) * size.y + Mathf.Abs(axes.ZAxis.y) * size.z,
+                Mathf.Abs(axes.XAxis.z) * size.x + Mathf.Abs(axes.YAxis.z) * size.y + Mathf.Abs(axes.ZAxis.z) * size.z);
+        }
+
+        private static RotationAxes DecodeRotationAxes(byte rotation)
+        {
+            int xAxisIndex = rotation & 0x03;
+            int yAxisIndex = (rotation >> 2) & 0x03;
+
+            if (xAxisIndex == yAxisIndex || xAxisIndex > 2 || yAxisIndex > 2)
+                return RotationAxes.Identity;
+
+            Vector3Int[] axisVectors =
+            {
+                new(1, 0, 0),
+                new(0, 1, 0),
+                new(0, 0, 1)
+            };
+
+            Vector3Int xAxis = axisVectors[xAxisIndex];
+            Vector3Int yAxis = axisVectors[yAxisIndex];
+            Vector3Int zAxis = Vector3Int.Cross(xAxis, yAxis);
+
+            int xSign = ((rotation >> 4) & 0x01) == 1 ? -1 : 1;
+            int ySign = ((rotation >> 5) & 0x01) == 1 ? -1 : 1;
+            int zSign = ((rotation >> 6) & 0x01) == 1 ? -1 : 1;
+
+            xAxis *= xSign;
+            yAxis *= ySign;
+            zAxis *= zSign;
+
+            return new RotationAxes(xAxis, yAxis, zAxis);
+        }
+
+        private readonly struct RotationAxes
+        {
+            public static readonly RotationAxes Identity = new(
+                new Vector3Int(1, 0, 0),
+                new Vector3Int(0, 1, 0),
+                new Vector3Int(0, 0, 1));
+
+            public RotationAxes(Vector3Int xAxis, Vector3Int yAxis, Vector3Int zAxis)
+            {
+                XAxis = xAxis;
+                YAxis = yAxis;
+                ZAxis = zAxis;
+            }
+
+            public Vector3Int XAxis { get; }
+            public Vector3Int YAxis { get; }
+            public Vector3Int ZAxis { get; }
         }
     }
 }
