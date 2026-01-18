@@ -168,7 +168,7 @@ namespace VoxReader
 
             Vector3Int xAxis = axisVectors[xAxisIndex];
             Vector3Int yAxis = axisVectors[yAxisIndex];
-            Vector3Int zAxis = Cross(xAxis, yAxis);
+            Vector3Int zAxis = Vector3Int.Cross(xAxis, yAxis);
 
             int xSign = ((rotation >> 4) & 0x01) == 1 ? -1 : 1;
             int ySign = ((rotation >> 5) & 0x01) == 1 ? -1 : 1;
@@ -198,14 +198,6 @@ namespace VoxReader
             public Vector3Int XAxis { get; }
             public Vector3Int YAxis { get; }
             public Vector3Int ZAxis { get; }
-        }
-
-        private static Vector3Int Cross(Vector3Int lhs, Vector3Int rhs)
-        {
-            return new Vector3Int(
-                lhs.y * rhs.z - lhs.z * rhs.y,
-                lhs.z * rhs.x - lhs.x * rhs.z,
-                lhs.x * rhs.y - lhs.y * rhs.x);
         }
     }
 }
