@@ -42,6 +42,10 @@ namespace VoxelDestructionPro.Tools
 
         [Range(0f, 1f)]
         public float paintIntensity = 1f;
+
+        [Header("Paint (Compound tweak)")]
+        [Tooltip("Extra multiplier applied ONLY when CompoundBoxCollider mode is active, to make paint look as 'wide' as Mesh mode.")]
+        [Min(1f)] public float compoundPaintRadiusMultiplier = 1.1f;
         
         private void OnCollisionEnter(Collision other)
         {
@@ -66,16 +70,48 @@ namespace VoxelDestructionPro.Tools
             ContactPoint contact = other.GetContact(0);
             Collider voxelCollider = ResolveVoxelCollider(vox, contact);
 
-            if (vox.TryGetComponent(out VoxelColorModifierCompound compoundModifier))
-            {
-                compoundModifier.ApplyImpactColor(voxelCollider, contact.point, impactType, paintRadius, paintNoise, paintFalloff, paintIntensity);
-            }
-            else if (vox.TryGetComponent(out VoxelColorModifier colorModifier))
-            {
-                colorModifier.ApplyImpactColor(voxelCollider, contact.point, impactType, paintRadius, paintNoise, paintFalloff, paintIntensity);
-            }
+            DestructionData destructionData = new DestructionData(
+                destructionType,
+                other.contacts[0].point,
+                other.contacts[0].point - other.contacts[0].normal * rad,
+                rad
+            );
 
-            vox.AddDestruction(new DestructionData(destructionType, other.contacts[0].point, other.contacts[0].point - other.contacts[0].normal * rad, rad));
+            bool destructionStarted = vox.AddDestruction(destructionData);
+
+            if (!destructionStarted)
+                return;
+
+            bool compound = vox.IsCompoundColliderModeActive();
+
+            if (compound)
+            {
+                float boostedRadius = paintRadius * Mathf.Max(1f, compoundPaintRadiusMultiplier);
+                Vector3 paintPoint = contact.point;
+
+                if (vox.TryGetComponent(out VoxelColorModifierCompound compoundModifier))
+                {
+                    compoundModifier.ApplyImpactColor(voxelCollider, paintPoint, impactType, boostedRadius, paintNoise, paintFalloff, paintIntensity);
+                }
+                else if (vox.TryGetComponent(out VoxelColorModifier fallbackMeshModifier))
+                {
+                    fallbackMeshModifier.ApplyImpactColor(paintPoint, impactType, boostedRadius, paintNoise, paintFalloff, paintIntensity);
+                }
+            }
+            else
+            {
+                Collider targetCol = vox.targetCollider != null ? vox.targetCollider : voxelCollider;
+                Vector3 paintPoint = targetCol != null ? targetCol.ClosestPoint(contact.point) : contact.point;
+
+                if (vox.TryGetComponent(out VoxelColorModifier meshModifier))
+                {
+                    meshModifier.ApplyImpactColor(targetCol, paintPoint, impactType, paintRadius, paintNoise, paintFalloff, paintIntensity);
+                }
+                else if (vox.TryGetComponent(out VoxelColorModifierCompound fallbackCompound))
+                {
+                    fallbackCompound.ApplyImpactColor(targetCol, paintPoint, impactType, paintRadius, paintNoise, paintFalloff, paintIntensity);
+                }
+            }
         }
 
         private static Collider ResolveVoxelCollider(DynamicVoxelObj voxelObj, ContactPoint contact)

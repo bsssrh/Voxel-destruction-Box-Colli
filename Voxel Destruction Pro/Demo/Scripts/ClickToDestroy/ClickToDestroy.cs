@@ -26,7 +26,11 @@ namespace VoxelDestructionPro.Demo
 
         [Range(0f, 1f)]
         public float paintIntensity = 1f;
-    
+
+        [Header("Paint (Compound tweak)")]
+        [Tooltip("Extra multiplier applied ONLY when CompoundBoxCollider mode is active, to make paint look as 'wide' as Mesh mode.")]
+        [Min(1f)] public float compoundPaintRadiusMultiplier = 1.1f;
+
         private void Update()
         {
             bool oneClick = Input.GetKey(KeyCode.LeftShift);
@@ -45,13 +49,38 @@ namespace VoxelDestructionPro.Demo
                 
                 bool destructionStarted = vo.AddDestruction_Sphere(hit.point, destructionRadius);
 
-                if (vo.TryGetComponent(out VoxelColorModifierCompound compoundModifier))
+                if (!destructionStarted)
+                    return;
+
+                bool compound = vo.IsCompoundColliderModeActive();
+
+                if (compound)
                 {
-                    compoundModifier.ApplyImpactColor(hit.collider, hit.point, impactType, paintRadius, paintNoise, paintFalloff, paintIntensity);
+                    float boostedRadius = paintRadius * Mathf.Max(1f, compoundPaintRadiusMultiplier);
+                    Vector3 paintPoint = hit.point;
+
+                    if (vo.TryGetComponent(out VoxelColorModifierCompound compoundModifier))
+                    {
+                        compoundModifier.ApplyImpactColor(hit.collider, paintPoint, impactType, boostedRadius, paintNoise, paintFalloff, paintIntensity);
+                    }
+                    else if (vo.TryGetComponent(out VoxelColorModifier fallbackMeshModifier))
+                    {
+                        fallbackMeshModifier.ApplyImpactColor(paintPoint, impactType, boostedRadius, paintNoise, paintFalloff, paintIntensity);
+                    }
                 }
-                else if (vo.TryGetComponent(out VoxelColorModifier colorModifier))
+                else
                 {
-                    colorModifier.ApplyImpactColor(hit.collider, hit.point, impactType, paintRadius, paintNoise, paintFalloff, paintIntensity);
+                    Collider targetCol = vo.targetCollider != null ? vo.targetCollider : hit.collider;
+                    Vector3 paintPoint = targetCol != null ? targetCol.ClosestPoint(hit.point) : hit.point;
+
+                    if (vo.TryGetComponent(out VoxelColorModifier meshModifier))
+                    {
+                        meshModifier.ApplyImpactColor(targetCol, paintPoint, impactType, paintRadius, paintNoise, paintFalloff, paintIntensity);
+                    }
+                    else if (vo.TryGetComponent(out VoxelColorModifierCompound fallbackCompound))
+                    {
+                        fallbackCompound.ApplyImpactColor(targetCol, paintPoint, impactType, paintRadius, paintNoise, paintFalloff, paintIntensity);
+                    }
                 }
             }
         }
