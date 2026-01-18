@@ -169,7 +169,7 @@ namespace VoxelDestructionPro.VoxelObjects
                         continue; 
                     }
                 
-                GameObject nObj = InstantiateVox(isoSettings.isolationFragmentPrefab, targetFilter.transform.TransformPoint(positions[i] * GetSingleVoxelSize()), transform.rotation);
+                GameObject nObj = InstantiateVox(isoSettings.isolationFragmentPrefab, targetFilter.transform.TransformPoint(positions[i] * GetSingleVoxelSize()), targetFilter.transform.rotation);
                 DisableDataProviders(nObj);
                 nObj.transform.parent = fragmentParent;
                 

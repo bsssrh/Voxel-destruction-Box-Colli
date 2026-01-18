@@ -655,7 +655,7 @@ namespace VoxelDestructionPro.VoxelObjects
                         GameObject nObj = InstantiateVox(
                             dynamicSettings.voxelPrefab,
                             targetFilter.transform.TransformPoint(position * GetSingleVoxelSize()),
-                            transform.rotation
+                            targetFilter.transform.rotation
                         );
 
                         DisableDataProviders(nObj);
@@ -684,7 +684,7 @@ namespace VoxelDestructionPro.VoxelObjects
                 GameObject nObj = InstantiateVox(
                     dynamicSettings.fragmentPrefab,
                     targetFilter.transform.TransformPoint(positions[i] * GetSingleVoxelSize()),
-                    transform.rotation
+                    targetFilter.transform.rotation
                 );
 
                 DisableDataProviders(nObj);
