@@ -1,11 +1,7 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using Better.StreamingAssets;
-using Unity.Jobs;
-using Unity.Mathematics;
 using UnityEngine;
-using UnityEngine.SceneManagement;
 using VoxelDestructionPro.Data;
 using VoxelDestructionPro.Data.Serializable;
 using VoxelDestructionPro.Settings;
@@ -52,13 +48,21 @@ namespace VoxelDestructionPro
         [Header("Fragment pooling")] 
         
         public PooledFragments[] fragmentPools;
+        [Min(0f)]
+        public float poolingUpdateInterval = 0.2f;
 
         //Main object pool
         private bool poolChanged;
         private Dictionary<GameObject, Queue<GameObject>> objectPool;
+        private Dictionary<GameObject, int> poolTargetCounts;
+        private float poolingUpdateTimer;
         
         //Vox obj caching
-        private Dictionary<Tuple<string, int>, CachedVoxelData> voxelCache;
+        [Header("Voxel cache")]
+        [Min(0)]
+        public int maxVoxelCacheEntries = 128;
+        private Dictionary<Tuple<string, int>, LinkedListNode<VoxelCacheEntry>> voxelCache;
+        private LinkedList<VoxelCacheEntry> voxelCacheLru;
 
         private bool betterStreamingAssetsLoaded;
         
@@ -100,18 +104,21 @@ namespace VoxelDestructionPro
         /// <returns></returns>
         public VoxelData LoadAndCacheVoxFile(string modelpath, int modelIndex)
         {
-            voxelCache ??= new Dictionary<Tuple<string, int>, CachedVoxelData>();
+            voxelCache ??= new Dictionary<Tuple<string, int>, LinkedListNode<VoxelCacheEntry>>();
+            voxelCacheLru ??= new LinkedList<VoxelCacheEntry>();
             
             Tuple<string, int> key = new Tuple<string, int>(modelpath, modelIndex);
-            if (voxelCache.ContainsKey(key))
+            if (voxelCache.TryGetValue(key, out LinkedListNode<VoxelCacheEntry> cachedNode))
             {
                 //Aleady cached, we dont need to load
-                return new VoxelData(voxelCache[key].GetCopy());
+                voxelCacheLru.Remove(cachedNode);
+                voxelCacheLru.AddFirst(cachedNode);
+                return new VoxelData(cachedNode.Value.Data.GetCopy());
             }
 
             VoxelParser parser = new VoxelParser(modelpath, modelIndex);
             VoxelData file = parser.ParseToVoxelData();
-            voxelCache.Add(key, file.ToCachedVoxelData().GetCopy());
+            CacheVoxelData(key, file.ToCachedVoxelData().GetCopy());
 
             return file;
         }
@@ -123,6 +130,7 @@ namespace VoxelDestructionPro
         private void InitPooling()
         {
             objectPool = new Dictionary<GameObject, Queue<GameObject>>();
+            poolTargetCounts = new Dictionary<GameObject, int>();
 
             foreach (var pool in fragmentPools)
             {
@@ -139,9 +147,11 @@ namespace VoxelDestructionPro
                 }
                 
                 objectPool.Add(pool.prefab, instances);
+                poolTargetCounts[pool.prefab] = pool.instanceCount;
             }
 
             poolChanged = false;
+            poolingUpdateTimer = poolingUpdateInterval;
         }
         
         /// <inheritdoc cref="InstantiatePooled(UnityEngine.GameObject,UnityEngine.Vector3,UnityEngine.Quaternion)"/>
@@ -191,7 +201,8 @@ namespace VoxelDestructionPro
             
             foreach (var kvp in objectPool)
             {
-                int targetCount = fragmentPools.First(t => t.prefab == kvp.Key).instanceCount;
+                if (!poolTargetCounts.TryGetValue(kvp.Key, out int targetCount))
+                    continue;
 
                 if (kvp.Value.Count < targetCount)
                 {
@@ -209,9 +220,54 @@ namespace VoxelDestructionPro
         
         private void Update()
         {
-            UpdatePooling();
+            poolingUpdateTimer -= Time.unscaledDeltaTime;
+            if (poolingUpdateTimer <= 0f)
+            {
+                poolingUpdateTimer = Mathf.Max(0.01f, poolingUpdateInterval);
+                UpdatePooling();
+            }
         }
 
         #endregion
+
+        private void CacheVoxelData(Tuple<string, int> key, CachedVoxelData data)
+        {
+            if (maxVoxelCacheEntries <= 0)
+                return;
+
+            if (voxelCache.TryGetValue(key, out LinkedListNode<VoxelCacheEntry> cachedNode))
+            {
+                cachedNode.Value.Data = data;
+                voxelCacheLru.Remove(cachedNode);
+                voxelCacheLru.AddFirst(cachedNode);
+                return;
+            }
+
+            var entry = new VoxelCacheEntry(key, data);
+            var node = voxelCacheLru.AddFirst(entry);
+            voxelCache[key] = node;
+
+            if (voxelCache.Count <= maxVoxelCacheEntries)
+                return;
+
+            LinkedListNode<VoxelCacheEntry> last = voxelCacheLru.Last;
+            if (last == null)
+                return;
+
+            voxelCacheLru.RemoveLast();
+            voxelCache.Remove(last.Value.Key);
+        }
+
+        private sealed class VoxelCacheEntry
+        {
+            public VoxelCacheEntry(Tuple<string, int> key, CachedVoxelData data)
+            {
+                Key = key;
+                Data = data;
+            }
+
+            public Tuple<string, int> Key { get; }
+            public CachedVoxelData Data { get; set; }
+        }
     }
 }
