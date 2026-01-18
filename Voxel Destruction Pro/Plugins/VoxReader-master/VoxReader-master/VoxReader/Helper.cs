@@ -20,7 +20,7 @@ namespace VoxReader
             return array;
         }
 
-        public static IEnumerable<IModel> ExtractModels(IChunk mainChunk, IPalette palette)
+        public static IEnumerable<IModel> ExtractModels(IChunk mainChunk, IPalette palette, bool applyTransformRotation)
         {
             var sizeChunks = mainChunk.GetChildren<ISizeChunk>();
             var voxelChunks = mainChunk.GetChildren<IVoxelChunk>();
@@ -68,7 +68,7 @@ namespace VoxReader
                     Vector3 size = sizeChunks[id].Size;
                     Vector3 position = GetGlobalTranslation(transformNodeChunk);
                     byte rotation = transformNodeChunk.Frames[0].Rotation;
-                    bool hasRotation = rotation != 0;
+                    bool hasRotation = applyTransformRotation && rotation != 0;
                     RotationAxes rotationAxes = hasRotation ? DecodeRotationAxes(rotation) : RotationAxes.Identity;
                     Vector3 rotatedSize = hasRotation ? GetRotatedSize(size, rotationAxes) : size;
                     Vector3 pivot = hasRotation ? (size - Vector3.one) / 2f : Vector3.zero;
