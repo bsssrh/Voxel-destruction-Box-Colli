@@ -1,67 +1,47 @@
-using System.Collections.Generic;
 using UnityEngine;
 using VoxelDestructionPro.VoxelObjects;
 
 namespace VoxelDestructionPro.Lite
 {
     /// <summary>
-    /// Lite explosion: single-radius sphere destruction around this object.
-    /// This is a simplified version without advanced settings.
+    /// Minimal explosive: wait -> overlap sphere -> destroy nearby voxel objects.
+    /// No paint, no material filters, no fancy options.
     /// </summary>
     public class LiteExplosion : MonoBehaviour
     {
-        [Tooltip("Explosion radius used for overlap and destruction.")]
-        public float explosionRadius = 6f;
+        [Min(0f)]
+        public float delay = 0.5f;
+        [Min(0.1f)]
+        public float radius = 6f;
 
-        [Tooltip("Delay before triggering the explosion.")]
-        public float delay = 0f;
-
-        [Tooltip("Optional physics force applied to nearby rigidbodies.")]
-        public float explosionForce = 0f;
-
-        private readonly HashSet<DynamicVoxelObj> touchedObjects = new HashSet<DynamicVoxelObj>();
-        private readonly HashSet<Rigidbody> touchedBodies = new HashSet<Rigidbody>();
+        private float triggerTime;
 
         private void Start()
         {
-            if (delay <= 0f)
-                Explode();
-            else
-                Invoke(nameof(Explode), delay);
+            triggerTime = Time.time + delay;
         }
 
-        public void Explode()
+        private void Update()
         {
-            Vector3 position = transform.position;
-            Collider[] colliders = Physics.OverlapSphere(
-                position,
-                explosionRadius,
-                Physics.DefaultRaycastLayers,
-                QueryTriggerInteraction.Ignore
-            );
+            if (Time.time < triggerTime)
+                return;
 
-            touchedObjects.Clear();
-            touchedBodies.Clear();
+            TriggerExplosion();
+            Destroy(gameObject);
+        }
+
+        private void TriggerExplosion()
+        {
+            Vector3 origin = transform.position;
+            Collider[] colliders = Physics.OverlapSphere(origin, radius, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore);
 
             for (int i = 0; i < colliders.Length; i++)
             {
-                Collider collider = colliders[i];
-                if (collider == null)
+                DynamicVoxelObj voxelObj = colliders[i].GetComponentInParent<DynamicVoxelObj>();
+                if (voxelObj == null)
                     continue;
 
-                DynamicVoxelObj vox = collider.GetComponentInParent<DynamicVoxelObj>();
-                if (vox == null || touchedObjects.Contains(vox))
-                    continue;
-
-                touchedObjects.Add(vox);
-                vox.AddDestruction_Sphere(position, explosionRadius);
-
-                if (explosionForce > 0f)
-                {
-                    Rigidbody body = collider.attachedRigidbody;
-                    if (body != null && touchedBodies.Add(body))
-                        body.AddExplosionForce(explosionForce, position, explosionRadius);
-                }
+                voxelObj.AddDestruction_Sphere(origin, radius);
             }
         }
     }

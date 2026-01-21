@@ -1,69 +1,91 @@
-using System.IO;
 using UnityEngine;
-using VoxelDestructionPro.VoxDataProviders;
 using VoxelDestructionPro.VoxelObjects;
-
-using VoxelDestructionPro;
+using VoxelDestructionPro.VoxDataProviders;
 
 namespace VoxelDestructionPro.Lite
 {
     /// <summary>
-    /// Lite loader: creates a DynamicVoxelObj + MeshCollider and lets VoxFileDataProvider load the .vox data.
+    /// Minimal loader for a single .vox model.
+    /// Uses VoxFileDataProvider under the hood, but exposes a tiny API.
     /// </summary>
+    [RequireComponent(typeof(DynamicVoxelObj))]
     public class LiteVoxLoader : MonoBehaviour
     {
-        [Tooltip("Path inside StreamingAssets without extension (e.g. Models/ship).")]
+        [Header("Source")]
+        [Tooltip("Drag & drop a .vox file here (Editor only).")]
+        public DefaultAsset voxFile;
+
+        [Tooltip("Fallback path inside StreamingAssets (without extension).")]
         public string modelPath;
 
         [Tooltip("Model index inside the .vox file.")]
+        [Min(0)]
         public int modelIndex;
 
-        [Tooltip("Optional Lite manager override. If null, LiteVoxelManager.Instance is used.")]
-        public LiteVoxelManager manager;
+        [Header("Behavior")]
+        public bool loadOnStart = true;
+
+        private DynamicVoxelObj voxelObj;
+        private VoxFileDataProvider dataProvider;
+
+        private void Awake()
+        {
+            voxelObj = GetComponent<DynamicVoxelObj>();
+            dataProvider = GetComponent<VoxFileDataProvider>();
+
+            if (dataProvider == null)
+                dataProvider = gameObject.AddComponent<VoxFileDataProvider>();
+
+            EnsureMeshCollider();
+        }
 
         private void Start()
         {
+            if (!loadOnStart)
+                return;
+
             Load();
         }
 
         public void Load()
         {
-            LiteVoxelManager activeManager = manager != null ? manager : LiteVoxelManager.Instance;
-            if (activeManager == null)
-            {
-                Debug.LogError("[LiteVoxLoader] No LiteVoxelManager found in the scene.");
+            if (voxelObj == null || dataProvider == null)
                 return;
-            }
 
-            string objectName = string.IsNullOrWhiteSpace(modelPath)
-                ? "Lite Voxel"
-                : Path.GetFileNameWithoutExtension(modelPath);
+            ApplyLiteDefaults();
+            ApplySourceSettings();
 
-            GameObject voxRoot = new GameObject(objectName);
-            voxRoot.transform.SetParent(transform, false);
+            dataProvider.Load(false);
+        }
 
-            var dynamicVoxel = voxRoot.AddComponent<DynamicVoxelObj>();
-            dynamicVoxel.meshSettings = activeManager.MeshSettings;
-            dynamicVoxel.dynamicSettings = activeManager.DynamicSettings;
-            dynamicVoxel.isoSettings = activeManager.IsolationSettings;
+        private void ApplyLiteDefaults()
+        {
+            LiteVoxelManager manager = LiteVoxelManager.Instance;
+            if (manager == null)
+                return;
 
-            GameObject meshObject = new GameObject("Voxel Mesh");
-            meshObject.transform.SetParent(voxRoot.transform, false);
+            manager.ApplyDefaults(voxelObj);
+        }
 
-            var meshFilter = meshObject.AddComponent<MeshFilter>();
-            var meshRenderer = meshObject.AddComponent<MeshRenderer>();
-            var meshCollider = meshObject.AddComponent<MeshCollider>();
+        private void ApplySourceSettings()
+        {
+            dataProvider.voxFile = voxFile;
+            dataProvider.modelPath = modelPath;
+            dataProvider.modelIndex = modelIndex;
+            dataProvider.useModelCaching = false;
+        }
 
-            meshRenderer.material = activeManager.DefaultMaterial;
-            meshCollider.cookingOptions = MeshColliderCookingOptions.None;
+        private void EnsureMeshCollider()
+        {
+            if (voxelObj.targetCollider is MeshCollider)
+                return;
 
-            dynamicVoxel.targetFilter = meshFilter;
-            dynamicVoxel.targetCollider = meshCollider;
+            MeshCollider meshCollider = GetComponent<MeshCollider>();
+            if (meshCollider == null)
+                meshCollider = gameObject.AddComponent<MeshCollider>();
 
-            var provider = voxRoot.AddComponent<VoxFileDataProvider>();
-            provider.modelPath = modelPath;
-            provider.modelIndex = Mathf.Max(0, modelIndex);
-            provider.useModelCaching = FindObjectOfType<VoxelManager>() != null;
+            meshCollider.convex = false;
+            voxelObj.targetCollider = meshCollider;
         }
     }
 }

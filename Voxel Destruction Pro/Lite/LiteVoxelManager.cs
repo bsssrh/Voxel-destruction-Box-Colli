@@ -1,33 +1,23 @@
 using UnityEngine;
 using VoxelDestructionPro.Settings;
+using VoxelDestructionPro.VoxelObjects;
 
 namespace VoxelDestructionPro.Lite
 {
     /// <summary>
-    /// Minimal manager for Lite examples (supplies defaults for LiteVoxLoader).
+    /// Super-light manager with only the required defaults for Lite scripts.
+    /// Attach once in the scene and reference the settings you want to use.
     /// </summary>
     public class LiteVoxelManager : MonoBehaviour
     {
         public static LiteVoxelManager Instance { get; private set; }
 
-        [Header("Defaults")]
-        [Tooltip("Material assigned to the generated voxel mesh.")]
-        public Material defaultMaterial;
-
-        [Tooltip("Mesh settings for Lite-generated voxel objects.")]
+        [Header("Defaults (minimal)")]
+        public Material standardMaterial;
         public MeshSettingsObj meshSettings;
-
-        [Tooltip("Dynamic settings for destruction (copied at runtime).")]
+        public IsoSettings isolationSettings;
         public DynSettings dynamicSettings;
-
-        private IsoSettings runtimeIsoSettings;
-        private DynSettings runtimeDynamicSettings;
-        private MeshSettingsObj runtimeMeshSettings;
-
-        public Material DefaultMaterial => defaultMaterial;
-        public MeshSettingsObj MeshSettings => runtimeMeshSettings;
-        public DynSettings DynamicSettings => runtimeDynamicSettings;
-        public IsoSettings IsolationSettings => runtimeIsoSettings;
+        public Transform fragmentParent;
 
         private void Awake()
         {
@@ -38,32 +28,27 @@ namespace VoxelDestructionPro.Lite
             }
 
             Instance = this;
-            InitDefaults();
         }
 
-        private void InitDefaults()
+        public void ApplyDefaults(DynamicVoxelObj voxelObj)
         {
-            runtimeMeshSettings = meshSettings != null
-                ? meshSettings
-                : ScriptableObject.CreateInstance<MeshSettingsObj>();
+            if (voxelObj == null)
+                return;
+
+            if (voxelObj.targetFilter != null && standardMaterial != null)
+                voxelObj.targetFilter.sharedMaterial = standardMaterial;
+
+            if (meshSettings != null)
+                voxelObj.meshSettings = meshSettings;
+
+            if (isolationSettings != null)
+                voxelObj.isoSettings = isolationSettings;
 
             if (dynamicSettings != null)
-            {
-                runtimeDynamicSettings = Instantiate(dynamicSettings);
-            }
-            else
-            {
-                runtimeDynamicSettings = ScriptableObject.CreateInstance<DynSettings>();
-                runtimeDynamicSettings.destructionMode = DynSettings.DestructionMode.Remove;
-            }
+                voxelObj.dynamicSettings = dynamicSettings;
 
-            runtimeDynamicSettings.fragmentColliderMode = DynSettings.FragmentColliderMode.MeshCollider;
-
-            runtimeIsoSettings = ScriptableObject.CreateInstance<IsoSettings>();
-            runtimeIsoSettings.isolationMode = IsoSettings.IsolationMode.None;
-            runtimeIsoSettings.runIsolationOnStart = false;
-            runtimeIsoSettings.minVoxelCount = 0;
-            runtimeIsoSettings.isolationFragmentPrefab = null;
+            if (fragmentParent != null)
+                voxelObj.fragmentParent = fragmentParent;
         }
     }
 }

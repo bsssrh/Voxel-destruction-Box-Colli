@@ -4,46 +4,47 @@ using VoxelDestructionPro.VoxelObjects;
 namespace VoxelDestructionPro.Lite
 {
     /// <summary>
-    /// Lite laser: shoots a ray from a camera/transform and destroys voxels on hit.
-    /// This is a simplified version without advanced settings.
+    /// Simple laser destruction: raycast -> destroy a small sphere.
+    /// Minimal settings, no paint or filters.
     /// </summary>
     public class LiteLaserDestroy : MonoBehaviour
     {
-        [Tooltip("Ray origin; if null, Camera.main is used.")]
+        [Header("Ray Source")]
+        public Camera rayCamera;
         public Transform rayOrigin;
 
-        [Tooltip("Optional destruction radius override. Leave <= 0 to use the default radius.")]
-        public float radius = 0f;
-
-        [Tooltip("Input key or mouse button (Mouse0/Mouse1/Mouse2).")]
-        public KeyCode activationKey = KeyCode.Mouse0;
-
-        private const float DefaultRadius = 2f;
-        private const float MaxDistance = 200f;
+        [Header("Settings")]
+        [Min(0.1f)]
+        public float maxDistance = 200f;
+        [Min(0.01f)]
+        public float destructionRadius = 1f;
+        public KeyCode fireKey = KeyCode.Mouse0;
 
         private void Update()
         {
-            if (!Input.GetKey(activationKey))
+            if (!Input.GetKeyDown(fireKey))
                 return;
 
-            Transform origin = rayOrigin != null
-                ? rayOrigin
-                : (Camera.main != null ? Camera.main.transform : null);
-
-            if (origin == null)
+            Ray ray = BuildRay();
+            if (!Physics.Raycast(ray, out RaycastHit hit, maxDistance))
                 return;
 
-            Ray ray = new Ray(origin.position, origin.forward);
-
-            if (!Physics.Raycast(ray, out RaycastHit hit, MaxDistance, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore))
-                return;
-
-            DynamicVoxelObj voxelObj = hit.collider.GetComponentInParent<DynamicVoxelObj>();
+            DynamicVoxelObj voxelObj = hit.transform.GetComponentInParent<DynamicVoxelObj>();
             if (voxelObj == null)
                 return;
 
-            float destructionRadius = radius > 0f ? radius : DefaultRadius;
             voxelObj.AddDestruction_Sphere(hit.point, destructionRadius);
+        }
+
+        private Ray BuildRay()
+        {
+            if (rayCamera != null)
+                return rayCamera.ScreenPointToRay(Input.mousePosition);
+
+            if (rayOrigin != null)
+                return new Ray(rayOrigin.position, rayOrigin.forward);
+
+            return new Ray(transform.position, transform.forward);
         }
     }
 }
