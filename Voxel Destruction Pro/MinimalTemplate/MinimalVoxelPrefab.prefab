@@ -97,6 +97,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 91e9e3029dd945b296919631edeeaeb3, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  voxAsset: {fileID: 0}
   streamingAssetPath: 
   modelIndex: 0
+  loadOnStart: 1
   targetObject: {fileID: 2080444379301995269}
