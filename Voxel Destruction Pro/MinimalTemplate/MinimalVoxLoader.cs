@@ -4,12 +4,15 @@ using VoxReader.Interfaces;
 
 namespace VoxelDestructionPro.Minimal
 {
+    [ExecuteAlways]
     public class MinimalVoxLoader : MonoBehaviour
     {
         [Header("Vox Source")]
         [SerializeField] private string streamingAssetPath;
         [SerializeField] private int modelIndex;
         [SerializeField] private bool loadOnStart = true;
+        [SerializeField] private bool loadInEditor;
+        [SerializeField] private bool loadInEditorNow;
 
         [Header("Target")]
         [SerializeField] private MinimalVoxelObject targetObject;
@@ -19,6 +22,24 @@ namespace VoxelDestructionPro.Minimal
             if (!loadOnStart)
                 return;
 
+            LoadAndApply(true);
+        }
+
+        private void OnValidate()
+        {
+            if (!loadInEditor || Application.isPlaying)
+                return;
+
+            if (!loadInEditorNow)
+                return;
+
+            loadInEditorNow = false;
+            LoadAndApply(true);
+        }
+
+        [ContextMenu("Load Vox From Path (with Logs)")]
+        public void LoadFromPathWithLogs()
+        {
             LoadAndApply(true);
         }
 
