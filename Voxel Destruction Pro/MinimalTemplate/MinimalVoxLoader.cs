@@ -4,13 +4,15 @@ using VoxReader.Interfaces;
 
 namespace VoxelDestructionPro.Minimal
 {
+    [ExecuteAlways]
     public class MinimalVoxLoader : MonoBehaviour
     {
         [Header("Vox Source")]
-        [SerializeField] private TextAsset voxAsset;
         [SerializeField] private string streamingAssetPath;
         [SerializeField] private int modelIndex;
         [SerializeField] private bool loadOnStart = true;
+        [SerializeField] private bool loadInEditor;
+        [SerializeField] private bool loadInEditorNow;
 
         [Header("Target")]
         [SerializeField] private MinimalVoxelObject targetObject;
@@ -20,42 +22,87 @@ namespace VoxelDestructionPro.Minimal
             if (!loadOnStart)
                 return;
 
-            MinimalVoxelData data = LoadVoxelData();
-            if (data != null)
-            {
-                if (targetObject == null)
-                    targetObject = GetComponent<MinimalVoxelObject>();
-
-                if (targetObject != null)
-                    targetObject.AssignVoxelData(data);
-            }
+            LoadAndApply(true);
         }
 
-        public MinimalVoxelData LoadVoxelData()
+        private void OnValidate()
         {
-            IVoxFile file = null;
+            if (!loadInEditor || Application.isPlaying)
+                return;
 
-            if (voxAsset != null && voxAsset.bytes != null && voxAsset.bytes.Length > 0)
+            if (!loadInEditorNow)
+                return;
+
+            loadInEditorNow = false;
+            LoadAndApply(true);
+        }
+
+        [ContextMenu("Load Vox From Path (with Logs)")]
+        public void LoadFromPathWithLogs()
+        {
+            LoadAndApply(true);
+        }
+
+        public bool LoadAndApply(bool log = false)
+        {
+            if (targetObject == null)
+                targetObject = GetComponent<MinimalVoxelObject>();
+
+            if (targetObject == null)
             {
-                file = VoxReader.VoxReader.Read(voxAsset.bytes);
+                if (log)
+                    Debug.LogWarning("MinimalVoxLoader: Missing MinimalVoxelObject target.", this);
+                return false;
             }
-            else if (!string.IsNullOrWhiteSpace(streamingAssetPath))
+
+            MinimalVoxelData data = LoadVoxelData(log);
+            if (data == null)
+                return false;
+
+            targetObject.AssignVoxelData(data);
+
+            if (log)
+                Debug.Log($"MinimalVoxLoader: Loaded '{streamingAssetPath}' (model {modelIndex}) into '{targetObject.name}'.", this);
+
+            return true;
+        }
+
+        public MinimalVoxelData LoadVoxelData(bool log = false)
+        {
+            if (string.IsNullOrWhiteSpace(streamingAssetPath))
             {
-                string path = streamingAssetPath;
-                if (!path.EndsWith(".vox"))
-                    path += ".vox";
-
-                string fullPath = Path.Combine(Application.streamingAssetsPath, path);
-
-                if (File.Exists(fullPath))
-                    file = VoxReader.VoxReader.Read(fullPath, false);
-            }
-
-            if (file?.Models == null || file.Models.Length == 0)
+                if (log)
+                    Debug.LogWarning("MinimalVoxLoader: Streaming asset path is empty.", this);
                 return null;
+            }
+
+            string fullPath = GetFullPath(streamingAssetPath);
+            if (!File.Exists(fullPath))
+            {
+                if (log)
+                    Debug.LogWarning($"MinimalVoxLoader: Vox file not found at '{fullPath}'.", this);
+                return null;
+            }
+
+            IVoxFile file = VoxReader.VoxReader.Read(fullPath, false);
+            if (file?.Models == null || file.Models.Length == 0)
+            {
+                if (log)
+                    Debug.LogWarning($"MinimalVoxLoader: No models found in '{fullPath}'.", this);
+                return null;
+            }
 
             int clampedIndex = Mathf.Clamp(modelIndex, 0, file.Models.Length - 1);
             return MinimalVoxelData.FromModel(file.Models[clampedIndex]);
+        }
+
+        private static string GetFullPath(string path)
+        {
+            string resolvedPath = path;
+            if (!resolvedPath.EndsWith(".vox"))
+                resolvedPath += ".vox";
+
+            return Path.Combine(Application.streamingAssetsPath, resolvedPath);
         }
     }
 }
